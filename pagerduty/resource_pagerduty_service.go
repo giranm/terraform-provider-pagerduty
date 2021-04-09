@@ -51,11 +51,36 @@ func resourcePagerDutyService() *schema.Resource {
 				ValidateFunc: validateValueFunc([]string{
 					"time",
 					"intelligent",
+					"rules",
 				}),
 			},
 			"alert_grouping_timeout": {
 				Type:     schema.TypeInt,
 				Optional: true,
+			},
+			"alert_grouping_rules": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"aggregate": {
+							Type:     schema.TypeString,
+							Required: true,
+							ValidateFunc: validateValueFunc([]string{
+								"all",
+								"any",
+							}),
+						},
+						"fields": {
+							Type:     schema.TypeList,
+							Required: true,
+							MinItems: 1,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+					},
+				},
 			},
 			"auto_resolve_timeout": {
 				Type:     schema.TypeString,
@@ -258,6 +283,10 @@ func buildServiceStruct(d *schema.ResourceData) (*pagerduty.Service, error) {
 		}
 	}
 
+	if attr, ok := d.GetOk("alert_grouping_rules"); ok {
+		service.AlertGroupingRules = expandAlertGroupingRules(attr)
+	}
+
 	if attr, ok := d.GetOk("incident_urgency_rule"); ok {
 		service.IncidentUrgencyRule = expandIncidentUrgencyRule(attr)
 		if service.IncidentUrgencyRule.Type == "use_support_hours" {
@@ -339,6 +368,12 @@ func resourcePagerDutyServiceRead(d *schema.ResourceData, meta interface{}) erro
 			d.Set("alert_grouping_timeout", "null")
 		} else {
 			d.Set("alert_grouping_timeout", *service.AlertGroupingTimeout)
+		}
+
+		if service.AlertGroupingRules != nil {
+			if err := d.Set("alert_grouping_rules", flattenAlertGroupingRules(service.AlertGroupingRules)); err != nil {
+				return resource.NonRetryableError(err)
+			}
 		}
 
 		if service.IncidentUrgencyRule != nil {
@@ -564,4 +599,35 @@ func expandScheduledActionAt(v interface{}) *pagerduty.At {
 func flattenScheduledActionAt(v *pagerduty.At) []interface{} {
 	at := map[string]interface{}{"type": v.Type, "name": v.Name}
 	return []interface{}{at}
+}
+
+func expandAlertGroupingRules(v interface{}) *pagerduty.AlertGroupingRules {
+	AlertGroupingRules := &pagerduty.AlertGroupingRules{}
+
+	ragr := v.([]interface{})[0].(map[string]interface{})
+
+	if v, ok := ragr["aggregate"]; ok {
+		AlertGroupingRules.Aggregate = v.(string)
+	}
+
+	if v, ok := ragr["fields"]; ok {
+		var fields []string
+
+		for _, field := range v.([]interface{}) {
+			fields = append(fields, field.(string))
+		}
+
+		AlertGroupingRules.Fields = fields
+	}
+
+	return AlertGroupingRules
+}
+
+func flattenAlertGroupingRules(v *pagerduty.AlertGroupingRules) []interface{} {
+	alertGroupingRules := map[string]interface{}{
+		"aggregate": v.Aggregate,
+		"fields":    v.Fields,
+	}
+
+	return []interface{}{alertGroupingRules}
 }
