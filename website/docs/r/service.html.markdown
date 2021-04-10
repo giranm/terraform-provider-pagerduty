@@ -54,8 +54,41 @@ The following arguments are supported:
   * `acknowledgement_timeout` - (Optional) Time in seconds that an incident changes to the Triggered State after being Acknowledged. Disabled if set to the `"null"` string.
   * `escalation_policy` - (Required) The escalation policy used by this service.
   * `alert_creation` - (Optional) Must be one of two values. PagerDuty receives events from your monitoring systems and can then create incidents in different ways. Value "create_incidents" is default: events will create an incident that cannot be merged. Value "create_alerts_and_incidents" is the alternative: events will create an alert and then add it to a new incident, these incidents can be merged. This option is recommended.
-  * `alert_grouping` - (Optional) Defines how alerts on this service will be automatically grouped into incidents. Note that the alert grouping features are available only on certain plans. If not set, each alert will create a separate incident; If value is set to `time`: All alerts within a specified duration will be grouped into the same incident. This duration is set in the `alert_grouping_timeout` setting (described below). Available on Standard, Enterprise, and Event Intelligence plans; If value is set to `intelligent` - Alerts will be intelligently grouped based on a machine learning model that looks at the alert summary, timing, and the history of grouped alerts. Available on Enterprise and Event Intelligence plan.
+  * `alert_grouping` - (Optional) Defines how alerts on this service will be automatically grouped into incidents. Note that the alert grouping features are available only on certain plans. If not set, each alert will create a separate incident.
+    * If value is set to `time`: All alerts within a specified duration will be grouped into the same incident. This duration is set in the `alert_grouping_timeout` setting (described below).   
+    [Time Based Alert Grouping](https://support.pagerduty.com/docs/time-based-alert-grouping) is available on Event Intelligence or Digital Operations plans.
+    * If value is set to `intelligent`: Alerts will be intelligently grouped based on a machine learning model that looks at the alert summary, timing, and the history of grouped alerts.   
+    [Intelligent Alert Grouping](https://support.pagerduty.com/docs/intelligent-alert-grouping) is available on Event Intelligence or Digital Operations plans.
+    * If value is set to `rules`: Alerts will be grouped based on the exact match of a set of chosen fields ([PD-CEF](https://support.pagerduty.com/docs/pd-cef) compliant) configured in the `alert_grouping_rules` setting (described below).   
+    [Content Based Alert Grouping](https://support.pagerduty.com/docs/content-based-alert-grouping) available on Event Intelligence or Digital Operations plans.
   * `alert_grouping_timeout` - (Optional) The duration in minutes within which to automatically group incoming alerts. This setting applies only when `alert_grouping` is set to `time`. To continue grouping alerts until the incident is resolved, set this value to `0`.
+
+When using `alert_grouping = "rules"` (Optional), you must specify the `alert_grouping_rules` block that contains the following arguments:
+* `aggregate` - Determine how alerts should be grouped; `all` (an exact match on every specified field) or `any` (an exact match on at least one of the specified fields)
+* `fields` - Array of PD-CEF fields as strings - at least *one* of the following must be included:
+  * `class`
+  * `component`
+  * `group`
+  * `severity`
+  * `source`
+  * `summary`
+  * `custom_details.*` - Using dot-notation path, `*` should be the custom json field name to match on (case-sensitive)
+
+Below is an example for a `pagerduty_service` resource with `alert_grouping = "rules"` and `alert_grouping_rules` enabled. Alerts will be grouped together based on exact matching payload entries for the `component` and `custom_details.my_tag` fields.
+```hcl
+resource "pagerduty_service" "example" {
+  name                    = "My Web App"
+  auto_resolve_timeout    = 14400
+  acknowledgement_timeout = 600
+  escalation_policy       = pagerduty_escalation_policy.example.id
+  alert_creation          = "create_alerts_and_incidents"
+  alert_grouping          = "rules"
+  alert_grouping_rules  {
+    aggregate = "all"
+    fields    = ["component", "custom_details.my_tag"]
+  }
+}
+```
 
 You may specify one optional `incident_urgency_rule` block configuring what urgencies to use.
 Your PagerDuty account must have the `urgencies` ability to assign an incident urgency rule.
